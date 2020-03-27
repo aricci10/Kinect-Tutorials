@@ -123,4 +123,5 @@ class SampleListener:
 
 if __name__ == "__main__":
 
-    listener = Sample
+    listener = SampleListener()
+    listener.run()
