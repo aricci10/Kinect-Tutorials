@@ -21,7 +21,7 @@ class SampleListener:
 
         #We want to ask for color frames and depth frames
         self.kinect = PyKinectRuntime.PyKinectRuntime( 
-            PyKinectV2.FrameSourceTypes_Color | PyKinectV2.FrameSourceTypes_Depth)
+            Pk.FrameSourceTypes_Color | Pk.FrameSourceTypes_Depth)
 
         #create the buffers to store the mapped points.
         #buffer for the depth points mapped to RGB space
