@@ -1,0 +1,367 @@
+from pykinect2 import PyKinectV2
+from pykinect2.PyKinectV2 import *
+from pykinect2 import PyKinectRuntime
+import threading
+import numpy as np
+import open3d as o3d
+import time
+import cv2
+import ctypes
+from server import Client
+import json
+
+
+class SampleListener:
+    DEPTH_WIDTH = 512
+    DEPTH_HEIGHT = 424
+
+    def __init__(self):
+
+        self.values = dict()
+        self.last_rgb_frame = None
+        self.last_depth_frame = None
+        self.point_cloud_active = False
+        self.video_active = False
+        self.skeleton_active = True
+
+        self._done = False
+        depth2color_points_type = _ColorSpacePoint * np.int(self.DEPTH_WIDTH * self.DEPTH_HEIGHT)
+        self.depth2color_points = ctypes.cast(depth2color_points_type(), ctypes.POINTER(_ColorSpacePoint))
+
+        depth2camera_points_type = _CameraSpacePoint * np.int(self.DEPTH_WIDTH * self.DEPTH_HEIGHT)
+        self.depth2camera_points = ctypes.cast(depth2camera_points_type(), ctypes.POINTER(_CameraSpacePoint))
+
+        self._kinect = PyKinectRuntime.PyKinectRuntime(
+            PyKinectV2.FrameSourceTypes_Color | PyKinectV2.FrameSourceTypes_Body | PyKinectV2.FrameSourceTypes_Depth)
+
+        self._kinect2 = PyKinectRuntime.PyKinectRuntime(
+            PyKinectV2.FrameSourceTypes_Color | PyKinectV2.FrameSourceTypes_Body | PyKinectV2.FrameSourceTypes_Depth)
+
+        self.video_out = cv2.VideoWriter('output.mp4', cv2.VideoWriter_fourcc(*'m4s2'), 20.0, (1920, 1080))
+        self._bodies = None
+        self.server = Client(20004)
+
+        #TODO: no need for the thread
+
+        self.thread = threading.Thread(target=self.run)
+        self.thread.start()
+
+
+        # self.point_cloud_thread = threading.Thread(target=self.generate_point_clouds)
+        # self.point_cloud_thread.start()
+
+        # self.video_thread = threading.Thread(target=self.generate_video)
+        # self.video_thread.start()
+
+
+
+    """
+    def draw_body_bone(self, joints, jointPoints, color, joint0, joint1):
+        joint0State = joints[joint0].TrackingState;
+        joint1State = joints[joint1].TrackingState;
+
+        # both joints are not tracked
+        if (joint0State == PyKinectV2.TrackingState_NotTracked) or (joint1State == PyKinectV2.TrackingState_NotTracked):
+            return
+
+        # both joints are not *really* tracked
+        if (joint0State == PyKinectV2.TrackingState_Inferred) and (joint1State == PyKinectV2.TrackingState_Inferred):
+            return
+
+        # ok, at least one is good
+        start = (jointPoints[joint0].x, jointPoints[joint0].y)
+        end = (jointPoints[joint1].x, jointPoints[joint1].y)
+
+        try:
+            pygame.draw.line(self._frame_surface, color, start, end, 8)
+        except:  # need to catch it due to possible invalid positions (with inf)
+            pass
+            """
+
+    def give_joint_coordinates(self, joint, joint_orientations = None):
+
+        joint_dict = dict()
+
+        position_dict = dict()
+        orientation_dict = dict()
+
+        joint0State = joint.TrackingState;
+
+        # both joints are not tracked
+        if (joint0State == PyKinectV2.TrackingState_NotTracked):
+            return None
+
+        # both joints are not *really* tracked
+        if (joint0State == PyKinectV2.TrackingState_Inferred):
+            return None
+
+        position_dict["x"] = joint.Position.x
+        position_dict["y"] = joint.Position.y
+        position_dict["z"] = joint.Position.z
+
+        if joint_orientations is not None:
+            orientation_dict["x"] = joint_orientations.Orientation.x
+            orientation_dict["y"] = joint_orientations.Orientation.y
+            orientation_dict["z"] = joint_orientations.Orientation.z
+            orientation_dict["w"] = joint_orientations.Orientation.w
+
+        else:
+            orientation_dict["x"] = None
+            orientation_dict["y"] = None
+            orientation_dict["z"] = None
+            orientation_dict["w"] = None
+
+        joint_dict["position"] = position_dict
+        joint_dict["orientation"] = orientation_dict
+
+        return joint_dict
+    """
+    def draw_body(self, joints, jointPoints, color):
+        # Torso
+        self.draw_body_bone(joints, jointPoints, color, PyKinectV2.JointType_Head, PyKinectV2.JointType_Neck);
+        self.draw_body_bone(joints, jointPoints, color, PyKinectV2.JointType_Neck, PyKinectV2.JointType_SpineShoulder);
+        self.draw_body_bone(joints, jointPoints, color, PyKinectV2.JointType_SpineShoulder,
+                            PyKinectV2.JointType_SpineMid);
+        self.draw_body_bone(joints, jointPoints, color, PyKinectV2.JointType_SpineMid, PyKinectV2.JointType_SpineBase);
+        self.draw_body_bone(joints, jointPoints, color, PyKinectV2.JointType_SpineShoulder,
+                            PyKinectV2.JointType_ShoulderRight);
+        self.draw_body_bone(joints, jointPoints, color, PyKinectV2.JointType_SpineShoulder,
+                            PyKinectV2.JointType_ShoulderLeft);
+        self.draw_body_bone(joints, jointPoints, color, PyKinectV2.JointType_SpineBase, PyKinectV2.JointType_HipRight);
+        self.draw_body_bone(joints, jointPoints, color, PyKinectV2.JointType_SpineBase, PyKinectV2.JointType_HipLeft);
+
+        # Right Arm
+        self.draw_body_bone(joints, jointPoints, color, PyKinectV2.JointType_ShoulderRight,
+                            PyKinectV2.JointType_ElbowRight);
+        self.draw_body_bone(joints, jointPoints, color, PyKinectV2.JointType_ElbowRight,
+                            PyKinectV2.JointType_WristRight);
+        self.draw_body_bone(joints, jointPoints, color, PyKinectV2.JointType_WristRight,
+                            PyKinectV2.JointType_HandRight);
+        self.draw_body_bone(joints, jointPoints, color, PyKinectV2.JointType_HandRight,
+                            PyKinectV2.JointType_HandTipRight);
+        self.draw_body_bone(joints, jointPoints, color, PyKinectV2.JointType_WristRight,
+                            PyKinectV2.JointType_ThumbRight);
+
+        # Left Arm
+        self.draw_body_bone(joints, jointPoints, color, PyKinectV2.JointType_ShoulderLeft,
+                            PyKinectV2.JointType_ElbowLeft);
+        self.draw_body_bone(joints, jointPoints, color, PyKinectV2.JointType_ElbowLeft, PyKinectV2.JointType_WristLeft);
+        self.draw_body_bone(joints, jointPoints, color, PyKinectV2.JointType_WristLeft, PyKinectV2.JointType_HandLeft);
+        self.draw_body_bone(joints, jointPoints, color, PyKinectV2.JointType_HandLeft,
+                            PyKinectV2.JointType_HandTipLeft);
+        self.draw_body_bone(joints, jointPoints, color, PyKinectV2.JointType_WristLeft, PyKinectV2.JointType_ThumbLeft);
+
+        # Right Leg
+        self.draw_body_bone(joints, jointPoints, color, PyKinectV2.JointType_HipRight, PyKinectV2.JointType_KneeRight);
+        self.draw_body_bone(joints, jointPoints, color, PyKinectV2.JointType_KneeRight,
+                            PyKinectV2.JointType_AnkleRight);
+        self.draw_body_bone(joints, jointPoints, color, PyKinectV2.JointType_AnkleRight,
+                            PyKinectV2.JointType_FootRight);
+
+        # Left Leg
+        self.draw_body_bone(joints, jointPoints, color, PyKinectV2.JointType_HipLeft, PyKinectV2.JointType_KneeLeft);
+        self.draw_body_bone(joints, jointPoints, color, PyKinectV2.JointType_KneeLeft, PyKinectV2.JointType_AnkleLeft);
+        self.draw_body_bone(joints, jointPoints, color, PyKinectV2.JointType_AnkleLeft, PyKinectV2.JointType_FootLeft);
+        
+
+    def draw_color_frame(self, frame, target_surface):
+        target_surface.lock()
+        address = self._kinect.surface_as_array(target_surface.get_buffer())
+        ctypes.memmove(address, frame.ctypes.data, frame.size)
+        del address
+        target_surface.unlock()
+        """
+
+    def generate_point_clouds(self, last_rgb_frame, last_depth_frame):
+
+        initial = time.time()
+        self._kinect._mapper.MapDepthFrameToCameraSpace(ctypes.c_uint(self.DEPTH_WIDTH * self.DEPTH_HEIGHT),
+                                                        last_depth_frame,
+                                                        ctypes.c_uint(self.DEPTH_WIDTH * self.DEPTH_HEIGHT),
+                                                        self.depth2camera_points)
+        self._kinect._mapper.MapDepthFrameToColorSpace(ctypes.c_uint(self.DEPTH_WIDTH * self.DEPTH_HEIGHT),
+                                                       last_depth_frame,
+                                                       ctypes.c_uint(self.DEPTH_WIDTH * self.DEPTH_HEIGHT),
+                                                       self.depth2color_points)
+
+        # xyz_array = np.array([[self.depth2camera_points[i].x, self.depth2camera_points[i].y, self.depth2camera_points[i].z] for i in range(self.DEPTH_WIDTH * self.DEPTH_HEIGHT)])
+
+        xyz_array = np.ctypeslib.as_array(self.depth2camera_points, (self.DEPTH_HEIGHT * self.DEPTH_WIDTH,))
+        xyz_array = xyz_array.view((xyz_array.dtype[0], 3))
+
+        xyz_array[xyz_array < -100000] = 0
+        xyz_array[xyz_array > 100000] = 0
+
+        depth_xy_array = np.ctypeslib.as_array(self.depth2color_points, (self.DEPTH_HEIGHT * self.DEPTH_WIDTH,))
+        depth_xy_array = depth_xy_array.view((depth_xy_array.dtype[0], 2))
+
+        x_values = depth_xy_array[:, 0].astype(int, copy=False)
+        y_values = depth_xy_array[:, 1].astype(int, copy=False)
+
+        idxes = 4 * (x_values + 1920 * y_values)
+
+        idxes[idxes < 0] = 0
+        idxes[idxes > 1920 * 1080 * 4] = 0
+
+        b_array = last_rgb_frame[idxes].reshape((self.DEPTH_HEIGHT * self.DEPTH_WIDTH, 1))
+        g_array = last_rgb_frame[idxes + 1].reshape((self.DEPTH_HEIGHT * self.DEPTH_WIDTH, 1))
+        r_array = last_rgb_frame[idxes + 2].reshape((self.DEPTH_HEIGHT * self.DEPTH_WIDTH, 1))
+
+        rgb_array = np.concatenate((b_array, g_array, r_array), axis=1) / 255
+        rgb_array = rgb_array.astype(np.float16, copy=False)
+
+        rgb_array = rgb_array[~np.all(xyz_array == 0, axis=1)]
+        xyz_array = xyz_array[~np.all(xyz_array == 0, axis=1)] * 1000
+
+        initial = time.time()
+
+        # np.save("data/first_video/{}.npy".format(time.time()), np.concatenate((xyz_array.astype(np.float16, copy = False), rgb_array), axis = 1))
+
+        initial = time.time()
+        pcd = o3d.geometry.PointCloud()
+
+        pcd.points = o3d.utility.Vector3dVector(xyz_array.astype(np.float64))
+        pcd.colors = o3d.utility.Vector3dVector(rgb_array.astype(np.float64))
+        pcd = pcd.voxel_down_sample(voxel_size=0.02)
+        print(time.time() - initial)
+
+        o3d.io.write_point_cloud("{}.pcd".format(time.time()), pcd)
+
+        # o3d.io.write_point_cloud("data/three.js-dev/examples/pcd/last.pcd", pcd)
+
+    def generate_video(self, last_rgb_frame):
+
+        frame = last_rgb_frame.reshape((1080, 1920, 4))[:, :, :3]
+
+        self.video_out.write(frame)
+
+        cv2.imshow('frame', frame)
+
+        last_rgb_frame = None
+
+        # if cv2.waitKey(1) & 0xFF == ord('q'):
+        #   break
+
+        # self.video_out.release()
+        # cv2.destroyAllWindows()
+
+    def run(self):
+        # -------- Main Program Loop -----------
+        while not self._done:
+
+            if self._kinect.has_new_color_frame():
+
+                last_rgb_frame = self._kinect.get_last_color_frame()
+
+                if self.video_active:
+                    self.generate_video(last_rgb_frame)
+
+                if self._kinect.has_new_depth_frame():
+
+                    last_depth_frame = self._kinect._depth_frame_data
+
+                    if self.point_cloud_active:
+                        self.generate_point_clouds(last_rgb_frame, last_depth_frame)
+
+            # --- Cool! We have a body frame, so can get skeletons
+            if self._kinect.has_new_body_frame():
+                self._bodies = self._kinect.get_last_body_frame()
+
+            # --- draw skeletons to _frame_surface
+                if self._bodies is not None and self.skeleton_active:
+                    self.values = dict(body_1=None,
+                                       body_2=None,
+                                       body_3=None,
+                                       body_4=None,
+                                       body_5=None,
+                                       body_6=None)
+                    for i in range(0, self._kinect.max_body_count):
+
+                        body_dict = dict()
+
+                        body = self._bodies.bodies[i]
+                        if not body.is_tracked:
+                            continue
+
+                        joints = body.joints
+                        joint_orientations = body.joint_orientations
+
+                        body_dict["spine_base"] = self.give_joint_coordinates(joints[PyKinectV2.JointType_SpineBase],
+                                                                              joint_orientations[PyKinectV2.JointType_SpineBase])
+
+                        body_dict["spine_mid"] = self.give_joint_coordinates(joints[PyKinectV2.JointType_SpineMid],
+                                                                             joint_orientations[PyKinectV2.JointType_SpineMid])
+
+                        body_dict["neck"] = self.give_joint_coordinates(joints[PyKinectV2.JointType_Neck],
+                                                                        joint_orientations[PyKinectV2.JointType_Neck])
+
+                        body_dict["head"] = self.give_joint_coordinates(joints[PyKinectV2.JointType_Head])
+
+                        body_dict["shoulder_left"] = self.give_joint_coordinates(joints[PyKinectV2.JointType_ShoulderLeft],
+                                                                        joint_orientations[PyKinectV2.JointType_ShoulderLeft])
+
+                        body_dict["elbow_left"] = self.give_joint_coordinates(joints[PyKinectV2.JointType_ElbowLeft],
+                                                                              joint_orientations[PyKinectV2.JointType_ElbowLeft])
+
+                        body_dict["wrist_left"] = self.give_joint_coordinates(joints[PyKinectV2.JointType_WristLeft],
+                                                                              joint_orientations[PyKinectV2.JointType_WristLeft])
+
+                        body_dict["hand_left"] = self.give_joint_coordinates(joints[PyKinectV2.JointType_HandLeft],
+                                                                             joint_orientations[PyKinectV2.JointType_HandLeft])
+
+                        body_dict["shoulder_right"] = self.give_joint_coordinates(joints[PyKinectV2.JointType_ShoulderRight],
+                                                                            joint_orientations[PyKinectV2.JointType_ShoulderRight])
+
+                        body_dict["elbow_right"] = self.give_joint_coordinates(joints[PyKinectV2.JointType_ElbowRight],
+                                                                               joint_orientations[PyKinectV2.JointType_ElbowRight])
+
+                        body_dict["wrist_right"] = self.give_joint_coordinates(joints[PyKinectV2.JointType_WristRight],
+                                                                               joint_orientations[PyKinectV2.JointType_WristRight])
+
+                        body_dict["hand_right"] = self.give_joint_coordinates(joints[PyKinectV2.JointType_HandRight],
+                                                                              joint_orientations[PyKinectV2.JointType_HandRight])
+
+                        body_dict["hip_left"] = self.give_joint_coordinates(joints[PyKinectV2.JointType_HipLeft],
+                                                                            joint_orientations[PyKinectV2.JointType_HipLeft])
+
+                        body_dict["knee_left"] = self.give_joint_coordinates(joints[PyKinectV2.JointType_KneeLeft],
+                                                                             joint_orientations[PyKinectV2.JointType_KneeLeft])
+
+                        body_dict["ankle_left"] = self.give_joint_coordinates(joints[PyKinectV2.JointType_AnkleLeft],
+                                                                              joint_orientations[PyKinectV2.JointType_AnkleLeft])
+
+                        body_dict["foot_left"] = self.give_joint_coordinates(joints[PyKinectV2.JointType_FootLeft])
+
+                        body_dict["hip_right"] = self.give_joint_coordinates(joints[PyKinectV2.JointType_HipRight],
+                                                                             joint_orientations[PyKinectV2.JointType_HipRight])
+
+                        body_dict["knee_right"] = self.give_joint_coordinates(joints[PyKinectV2.JointType_KneeRight],
+                                                                              joint_orientations[PyKinectV2.JointType_KneeRight])
+
+                        body_dict["ankle_right"] = self.give_joint_coordinates(joints[PyKinectV2.JointType_AnkleRight],
+                                                                               joint_orientations[PyKinectV2.JointType_AnkleRight])
+
+                        body_dict["foot_right"] = self.give_joint_coordinates(joints[PyKinectV2.JointType_FootRight])
+
+                        body_dict["spine_shoulder"] = self.give_joint_coordinates(joints[PyKinectV2.JointType_SpineShoulder],
+                                                                                  joint_orientations[PyKinectV2.JointType_SpineShoulder])
+
+                        #all these are final joints.
+                        body_dict["hand_tip_left"] = self.give_joint_coordinates(joints[PyKinectV2.JointType_HandTipLeft])
+                        body_dict["thumb_left"] = self.give_joint_coordinates(joints[PyKinectV2.JointType_ThumbLeft])
+                        body_dict["hand_tip_right"] = self.give_joint_coordinates(joints[PyKinectV2.JointType_HandTipRight])
+                        body_dict["thumb_right"] = self.give_joint_coordinates(joints[PyKinectV2.JointType_ThumbRight])
+
+                        print(json.dumps(body_dict, indent=4))
+
+                        self.values["body_{}".format(i)] = body_dict
+
+            dict_to_send = dict(device_type="KN", payload=self.values)
+            json_to_send = json.dumps(dict_to_send)
+            self.server.send_message(json_to_send, ("192.168.50.136", 20002))
+
+        self._kinect.close()
+
+if __name__ == "__main__":
+
+    listener = Sample
