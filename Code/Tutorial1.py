@@ -109,13 +109,13 @@ class SampleListener:
         while not self.done:
 
             #wait to have one of each frames
-            if self._kinect.has_new_color_frame() and self._kinect.has_new_depth_frame():
+            if self.kinect.has_new_color_frame() and self._kinect.has_new_depth_frame():
 
                 #get a color frame as a numpy array
-                last_rgb_frame = self._kinect.get_last_color_frame()
+                last_rgb_frame = self.kinect.get_last_color_frame()
 
                 #get depth frame in original version to use in map function latter
-                last_depth_frame = self._kinect._depth_frame_data 
+                last_depth_frame = self.kinect._depth_frame_data 
 
                 self.generate_point_clouds(last_rgb_frame, last_depth_frame)
 
