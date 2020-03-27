@@ -26,11 +26,11 @@ class SampleListener:
         #create the buffers to store the mapped points.
         #buffer for the depth points mapped to RGB space
         depth2color_points_type = Pk._ColorSpacePoint * np.int(self.DEPTH_WIDTH * self.DEPTH_HEIGHT)
-        self.depth2color_points = ctypes.cast(depth2color_points_type(), ctypes.POINTER(_ColorSpacePoint))
+        self.depth2color_points = ctypes.cast(depth2color_points_type(), ctypes.POINTER(Pk._ColorSpacePoint))
 
         #buffer for depth points mapped to camera (x,y,z) space
         depth2camera_points_type = Pk._CameraSpacePoint * np.int(self.DEPTH_WIDTH * self.DEPTH_HEIGHT)
-        self.depth2camera_points = ctypes.cast(depth2camera_points_type(), ctypes.POINTER(_CameraSpacePoint))
+        self.depth2camera_points = ctypes.cast(depth2camera_points_type(), ctypes.POINTER(Pk._CameraSpacePoint))
 
 
 
