@@ -37,11 +37,11 @@ class SampleListener:
     def generate_point_clouds(self, last_rgb_frame, last_depth_frame):
 
         #initial = time.time()
-        self._kinect._mapper.MapDepthFrameToCameraSpace(ctypes.c_uint(self.DEPTH_WIDTH * self.DEPTH_HEIGHT),
+        self.kinect._mapper.MapDepthFrameToCameraSpace(ctypes.c_uint(self.DEPTH_WIDTH * self.DEPTH_HEIGHT),
                                                         last_depth_frame, #<-- use depth frame as input 
                                                         ctypes.c_uint(self.DEPTH_WIDTH * self.DEPTH_HEIGHT),
                                                         self.depth2camera_points) #<-- store in camera buffer
-        self._kinect._mapper.MapDepthFrameToColorSpace(ctypes.c_uint(self.DEPTH_WIDTH * self.DEPTH_HEIGHT),
+        self.kinect._mapper.MapDepthFrameToColorSpace(ctypes.c_uint(self.DEPTH_WIDTH * self.DEPTH_HEIGHT),
                                                        last_depth_frame, #<-- use depth frame as input
                                                        ctypes.c_uint(self.DEPTH_WIDTH * self.DEPTH_HEIGHT),
                                                        self.depth2color_points) #<-- store in color buffer
@@ -119,7 +119,7 @@ class SampleListener:
 
                 self.generate_point_clouds(last_rgb_frame, last_depth_frame)
 
-        self._kinect.close()
+        self.kinect.close()
 
 if __name__ == "__main__":
 
