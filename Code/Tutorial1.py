@@ -88,7 +88,7 @@ class SampleListener:
         rgb_array = rgb_array[~np.all(xyz_array == 0, axis=1)]
         xyz_array = xyz_array[~np.all(xyz_array == 0, axis=1)]
 
-        with open ("{}.npy".format(time.time()), 'w') as file:
+        with open ("{}.npy".format(time.time()), 'wb') as file:
             np.save(file, np.concatenate((xyz_array, rgb_array), axis = 1))
 
         #initial = time.time()
