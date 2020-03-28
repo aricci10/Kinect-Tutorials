@@ -109,7 +109,7 @@ class SampleListener:
         while not self.done:
 
             #wait to have one of each frames
-            if self.kinect.has_new_color_frame() and self._kinect.has_new_depth_frame():
+            if self.kinect.has_new_color_frame() and self.kinect.has_new_depth_frame():
 
                 #get a color frame as a numpy array
                 last_rgb_frame = self.kinect.get_last_color_frame()
